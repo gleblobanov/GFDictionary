@@ -10,45 +10,68 @@ import qualified Data.Map as Map
 import Text.ParserCombinators.Parsec
 import Control.Parallel.Strategies
 
+-- | Results of heuristics
 predictionsTSV :: String
 predictionsTSV = "engrus/predictions.tsv"
 
+-- | Abstract syntax for offline translation app
 dictionaryGF :: String
 dictionaryGF = "engrus/Dictionary.gf"
 
+-- | Russian concrete syntax for offline translation app
 dictionaryRus = "engrus/DictionaryRus.gf"
 
+-- | Compiled grammar
 dictionaryPGF :: String
 dictionaryPGF = "engrus/Dictionary.pgf"
 
+-- | Russian abstract syntax
 dictRusPGF :: String
 dictRusPGF = "engrus/DictRusAbs.pgf"
 
+-- | Concrete English syntax name for offline translation app
 concEng = "DictionaryEng"
+
+-- | Name of a variant of concrete Russian syntax
 concRus = "DictRus"
 
+-- | A variant of concrete Russian syntax
 concRusFile = "engrus/DictRus.gf"
 
+-- | WordNet lemma
 type Lemma = String
+
+-- | A line of the file with results of heuristics
 data PredRecord = PredRecord { predWNId :: String,
                                predPS   :: PoS,
                                predEng  :: Lemma,
                                predRus  :: Lemma }
                   deriving (Show)
 
+-- | Heuristics data
 type PredData = [PredRecord]
 
+
+-- | GF abstract syntax id
 type AbsId = String
+
+-- | Princeton WordNet offset
 type AbsWNId = String
+
+-- | Record binding GF abstract syntax id and Princeton WordNet offset
 data AbsRecord = AbsRecord { absId   :: AbsId,
                              absPS   :: PoS,
                              absWNId :: AbsWNId }
                  deriving (Eq, Ord, Show)
 
+-- | Map of lemmas to records with their abstract syntax ids and offsets
 type AbsData = Map.Map WordForm AbsRecord
 
+-- | Word form
 type WordForm = String
 
+
+-- | GF classification of parts of speech
 data PoS = V | V2 | V3 | VV | VS | VQ | VA | V2V | V2S | V2Q | V2A
          | A | A2
          | N | N2 | N3 | PN
@@ -56,12 +79,19 @@ data PoS = V | V2 | V3 | VV | VS | VQ | VA | V2V | V2S | V2Q | V2A
          | UndefPoS
          deriving (Show, Eq, Ord)
 
-
+-- | Checks if an argument is a verb
 isVerb p = p `elem` [V, V2, V3, VV, VS, VQ, VA, V2V, V2S, V2Q, V2A]
+
+-- | Checks if an argument is an adjective
 isAdj p  = p `elem`  [A, A2]
+
+-- | Checks if an argument is a noun
 isNoun p = p `elem` [N, N2, N3, PN]
+
+-- | Checks if an argument is an adverb
 isAdv p  = p `elem` [Adv, AdV, AdA, AdN, IAdv, CAdv]
 
+-- | Translates GF classification of parts of speech to WordnNet classification
 simplify :: PoS -> PoS
 simplify x | isVerb x  = V
            | isAdj x   = A
@@ -69,6 +99,7 @@ simplify x | isVerb x  = V
            | isAdv x   = Adv
            | otherwise = UndefPoS
 
+-- | Parses parts of speech both GF and WordNet
 parsePoS :: String -> PoS
 parsePoS x = case x of
   "v"   -> V
@@ -104,21 +135,28 @@ parsePoS x = case x of
 
   _      -> UndefPoS
 
+-- | Parser of tab-separated file
 tsvFile :: GenParser Char st [[String]]
 tsvFile = sepBy line eol
 
+-- | Parser of line of tab-separated file
 line :: GenParser Char st [String]
 line = sepBy cell (char '\t')
 
+-- | Parser of cell of line of tab-separated file
 cell :: GenParser Char st String
 cell = many (noneOf "\t\n")
 
+-- | Parser of end of line
 eol :: GenParser Char st Char
 eol = char '\n'
 
+-- | TSV parser run function
 parseTSV :: String -> Either ParseError [[String]]
 parseTSV = parse tsvFile "(unknown)"
 
+
+-- | Parses heuristics data
 getPredData :: IO PredData
 getPredData = do
   contentPred  <- readFile predictionsTSV
@@ -134,6 +172,7 @@ getPredData = do
   return predData
 
 
+-- | Parses GF abstract syntax data
 getAbsData :: IO AbsData
 getAbsData = do contentDict <- readFile dictionaryGF
                 let dict = map t $ filter isLong $ map words $ lines contentDict
@@ -148,6 +187,8 @@ getAbsData = do contentDict <- readFile dictionaryGF
                       where insertAbs m r = Map.insert (absId r) r m
                 return absData
 
+
+-- | Extracts Russian word forms from a Russian concrete syntax
 getRusWFs :: IO [(String, (String, PoS))]
 getRusWFs = do contentDict <- readFile concRusFile
                let dict = map t $ filter isLin $ map words $ lines contentDict
@@ -160,7 +201,7 @@ getRusWFs = do contentDict <- readFile concRusFile
                                              $ last $ splitOn "_" id'))
                return dict
 
-
+-- | Generates translation dictionary
 main :: IO ()
 main = do
   predData <- getPredData
@@ -226,7 +267,6 @@ myOrder :: (String, String, String, String) ->
 myOrder (x1, _, _, _) (x2, _, _, _) | x1 < x2  = LT
                                     | x1 == x2 = EQ
                                     | x1 > x2  = GT
-
 
 remDup :: [(String, String, String, String)] -> (String, String, String, String)
 remDup xs = let wfss = map (\(_,_,_,wfs) -> wfs) xs

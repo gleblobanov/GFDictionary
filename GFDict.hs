@@ -1,3 +1,10 @@
+{-|
+Module      : GFDict
+Description : Script generating GF translation dictionary from data received
+              by bridging Princeton WordNet and Russian segment of Open Multilingual WordNet.
+Author      : Gleb Lobanov
+Maintainer  : mail@gleblobanov.ru
+-}
 module GFDict where
 
 import qualified PGF2
@@ -10,68 +17,68 @@ import qualified Data.Map as Map
 import Text.ParserCombinators.Parsec
 import Control.Parallel.Strategies
 
--- | Results of heuristics
+-- | Results of heuristics.
 predictionsTSV :: String
 predictionsTSV = "engrus/predictions.tsv"
 
--- | Abstract syntax for offline translation app
+-- | Abstract syntax for offline translation app.
 dictionaryGF :: String
 dictionaryGF = "engrus/Dictionary.gf"
 
--- | Russian concrete syntax for offline translation app
+-- | Russian concrete syntax for offline translation app.
 dictionaryRus = "engrus/DictionaryRus.gf"
 
--- | Compiled grammar
+-- | Compiled grammar.
 dictionaryPGF :: String
 dictionaryPGF = "engrus/Dictionary.pgf"
 
--- | Russian abstract syntax
+-- | Russian abstract syntax.
 dictRusPGF :: String
 dictRusPGF = "engrus/DictRusAbs.pgf"
 
--- | Concrete English syntax name for offline translation app
+-- | Concrete English syntax name for offline translation app.
 concEng = "DictionaryEng"
 
--- | Name of a variant of concrete Russian syntax
+-- | Name of a variant of concrete Russian syntax.
 concRus = "DictRus"
 
--- | A variant of concrete Russian syntax
+-- | A variant of concrete Russian syntax.
 concRusFile = "engrus/DictRus.gf"
 
--- | WordNet lemma
+-- | WordNet lemma.
 type Lemma = String
 
--- | A line of the file with results of heuristics
+-- | A line of the file with results of heuristics.
 data PredRecord = PredRecord { predWNId :: String,
                                predPS   :: PoS,
                                predEng  :: Lemma,
                                predRus  :: Lemma }
                   deriving (Show)
 
--- | Heuristics data
+-- | Heuristics data.
 type PredData = [PredRecord]
 
 
--- | GF abstract syntax id
+-- | GF abstract syntax id for the offline translation app grammar.
 type AbsId = String
 
--- | Princeton WordNet offset
+-- | Princeton WordNet offset.
 type AbsWNId = String
 
--- | Record binding GF abstract syntax id and Princeton WordNet offset
+-- | Record binding GF abstract syntax id and Princeton WordNet offset.
 data AbsRecord = AbsRecord { absId   :: AbsId,
                              absPS   :: PoS,
                              absWNId :: AbsWNId }
                  deriving (Eq, Ord, Show)
 
--- | Map of lemmas to records with their abstract syntax ids and offsets
+-- | Map of GF abstract ids to records with their abstract syntax ids and offsets.
 type AbsData = Map.Map WordForm AbsRecord
 
--- | Word form
+-- | Word form.
 type WordForm = String
 
 
--- | GF classification of parts of speech
+-- | GF classification of parts of speech.
 data PoS = V | V2 | V3 | VV | VS | VQ | VA | V2V | V2S | V2Q | V2A
          | A | A2
          | N | N2 | N3 | PN
@@ -79,19 +86,19 @@ data PoS = V | V2 | V3 | VV | VS | VQ | VA | V2V | V2S | V2Q | V2A
          | UndefPoS
          deriving (Show, Eq, Ord)
 
--- | Checks if an argument is a verb
+-- | Checks if an argument is a verb.
 isVerb p = p `elem` [V, V2, V3, VV, VS, VQ, VA, V2V, V2S, V2Q, V2A]
 
--- | Checks if an argument is an adjective
+-- | Checks if an argument is an adjective.
 isAdj p  = p `elem`  [A, A2]
 
--- | Checks if an argument is a noun
+-- | Checks if an argument is a noun.
 isNoun p = p `elem` [N, N2, N3, PN]
 
--- | Checks if an argument is an adverb
+-- | Checks if an argument is an adverb.
 isAdv p  = p `elem` [Adv, AdV, AdA, AdN, IAdv, CAdv]
 
--- | Translates GF classification of parts of speech to WordnNet classification
+-- | Translates GF classification of parts of speech to WordnNet classification.
 simplify :: PoS -> PoS
 simplify x | isVerb x  = V
            | isAdj x   = A
@@ -99,7 +106,7 @@ simplify x | isVerb x  = V
            | isAdv x   = Adv
            | otherwise = UndefPoS
 
--- | Parses parts of speech both GF and WordNet
+-- | Parses parts of speech both GF and WordNet.
 parsePoS :: String -> PoS
 parsePoS x = case x of
   "v"   -> V
@@ -135,83 +142,84 @@ parsePoS x = case x of
 
   _      -> UndefPoS
 
--- | Parser of tab-separated file
+-- | Parser of tab-separated file.
 tsvFile :: GenParser Char st [[String]]
 tsvFile = sepBy line eol
 
--- | Parser of line of tab-separated file
+-- | Parser of line of tab-separated file.
 line :: GenParser Char st [String]
 line = sepBy cell (char '\t')
 
--- | Parser of cell of line of tab-separated file
+-- | Parser of cell of line of tab-separated file.
 cell :: GenParser Char st String
 cell = many (noneOf "\t\n")
 
--- | Parser of end of line
+-- | Parser of end of line.
 eol :: GenParser Char st Char
 eol = char '\n'
 
--- | TSV parser run function
+-- | TSV parser run function.
 parseTSV :: String -> Either ParseError [[String]]
 parseTSV = parse tsvFile "(unknown)"
 
 
--- | Parses heuristics data
+-- | Parses heuristics data.
 getPredData :: IO PredData
 getPredData = do
-  contentPred  <- readFile predictionsTSV
-  let contentPred' = case parseTSV contentPred of
+  contentPred  <- readFile predictionsTSV         -- Read a file with heuristics.
+  let contentPred' = case parseTSV contentPred of -- Parse the file.
         Left pe -> error $ show pe
         Right d -> d
-      predData = map getRecord $ filter isTransl contentPred' 
-        where isTransl = ("True" ==) . last
-              getRecord ss = PredRecord { predWNId = filter isDigit (head ss),
-                                          predPS    = parsePoS [head ss !! 4],
-                                          predEng   = ss !! 2,
-                                          predRus   = ss !! 4 }
+      predData = map getRecord $ filter isTransl contentPred' -- Extract data from the file.
+        where isTransl = ("True" ==) . last                   -- Choose only the translation pairs that algorithms marked correct.
+              getRecord ss = PredRecord { predWNId = filter isDigit (head ss), -- Get Princeton offset.
+                                          predPS    = parsePoS [head ss !! 4], -- Get WordNet part of speech.
+                                          predEng   = ss !! 2,                 -- English word form.
+                                          predRus   = ss !! 4 }                -- Russian word form.
   return predData
 
 
--- | Parses GF abstract syntax data
+-- | Parses GF abstract syntax data.
+-- Every line contains both abstract id and Princeton WordNet offset.
 getAbsData :: IO AbsData
-getAbsData = do contentDict <- readFile dictionaryGF
-                let dict = map t $ filter isLong $ map words $ lines contentDict
-                      where isLong l   = length l > 6
-                            absIdPos   = 1
-                            absPSPos   = 3
-                            absWNIdPos = 6
-                            t ws = AbsRecord { absId   = ws !! absIdPos,
+getAbsData = do contentDict <- readFile dictionaryGF -- Read a file with GF abstract syntax.
+                let dict = map t $ filter isLong $ map words $ lines contentDict -- Parse the file.
+                      where isLong l   = length l > 6 -- Choose only lines containing information, which are longer then 6 chars.
+                            absIdPos   = 1            -- The positions of the abstract ids.
+                            absPSPos   = 3            -- The positions of the parts of speech.
+                            absWNIdPos = 6            -- The position of Princeton offsets.
+                            t ws = AbsRecord { absId   = ws !! absIdPos, -- Create a record with information retrieved from the line.
                                                absPS   = parsePoS $ ws !! absPSPos,
                                                absWNId = ws !! absWNIdPos }
-                    absData = foldl insertAbs Map.empty dict
-                      where insertAbs m r = Map.insert (absId r) r m
+                    absData = foldl insertAbs Map.empty dict -- Map abstract ids to records that contain them.
+                      where insertAbs m r = Map.insert (absId r) r m --  Create a (key, value) record for the mapping.
                 return absData
 
 
--- | Extracts Russian word forms from a Russian concrete syntax
+-- | Extracts Russian word forms from a Russian concrete syntax.
 getRusWFs :: IO [(String, (String, PoS))]
-getRusWFs = do contentDict <- readFile concRusFile
-               let dict = map t $ filter isLin $ map words $ lines contentDict
-                      where isLin l | null l    = False
+getRusWFs = do contentDict <- readFile concRusFile -- Get content of the file with Russian concrete syntax.
+               let dict = map t $ filter isLin $ map words $ lines contentDict -- Parse the file.
+                      where isLin l | null l    = False -- Checks if a line contains a linearization function.
                                     | otherwise = head l == "lin"
-                            idPos   = 1
-                            toDrop  = 3
-                            t ws = let id' = ws !! idPos
-                                   in (id', (unwords (drop toDrop ws), parsePoS
-                                             $ last $ splitOn "_" id'))
+                            idPos   = 1 -- Position of abstract syntax id that is linearized.
+                            toDrop  = 3 -- Drop unnecessary symbols.
+                            t ws = let id' = ws !! idPos -- Get abstract id.
+                                   in (id', (unwords (drop toDrop ws), -- Get Russian word forms for the abstract id.
+                                             parsePoS $ last $ splitOn "_" id')) -- Get a part of speech.
                return dict
 
--- | Generates translation dictionary
+-- | Generates translation dictionary.
 main :: IO ()
 main = do
-  predData <- getPredData
-  absData  <- getAbsData
-  grEng    <- PGF2.readPGF dictionaryPGF
-  grRus    <- PGF2.readPGF dictRusPGF
-  rusWFs   <- getRusWFs
-  let d = map f predData
+  predData <- getPredData -- Get heuristics data.
+  absData  <- getAbsData  -- Get GF abstract syntax data.
+  grEng    <- PGF2.readPGF dictionaryPGF -- Get English grammar.
+  grRus    <- PGF2.readPGF dictRusPGF    -- Get Russian grammar.
+  rusWFs   <- getRusWFs -- Get data from a Russian concrete syntax.
+  let d = map f predData -- Transform heuristics data.
         where f predRec = do
-                morphsEng <- lum grEng (predEng predRec) concEng
+                morphsEng <- lum grEng (predEng predRec) concEng -- Get inflection information.
                 morphsRus <- lum grRus (predRus predRec) concRus
                 let absIdRus' [] = ""
                     absIdRus' ((id,_,_):_) = id
